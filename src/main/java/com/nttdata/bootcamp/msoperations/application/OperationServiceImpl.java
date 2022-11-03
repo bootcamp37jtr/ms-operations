@@ -1,9 +1,21 @@
 package com.nttdata.bootcamp.msoperations.application;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Collections;
+import java.util.Comparator;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Example;
 import org.springframework.data.domain.ExampleMatcher;
 import org.springframework.data.domain.ExampleMatcher.StringMatcher;
+import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
+import org.springframework.data.mongodb.core.aggregation.DateOperators;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -23,6 +35,9 @@ public class OperationServiceImpl implements OperationService {
 
 	@Autowired
 	OperationRepository operationRepository;
+	
+	//@Autowired
+	//private ReactiveMongoTemplate reactiveMongoTemplate;
 
 	@Autowired
 	WebClient.Builder webClientBuilder;
@@ -31,7 +46,7 @@ public class OperationServiceImpl implements OperationService {
 	public Mono<Operation> insertOperation(Mono<Operation> operation) {
 		return operation.flatMap(ope -> {
 			if (!"TRANS".equals(ope.getTypeOperation())) {
-				this.count(ope.getIdproduct()).subscribe(cantidad -> {
+				this.countByIdproduct(ope.getIdproduct()).subscribe(cantidad -> {
 					log.info("operaciones registradas: " + cantidad);
 					// se valida la cantidad de operaciones que se tiene para el calculo de la comision
 					getCustomerAccount(operation).subscribe(ac -> {
@@ -120,7 +135,7 @@ public class OperationServiceImpl implements OperationService {
 		return operationRepository.findAll(personExample, Sort.by("createdAt"));
 	}
 
-	public Mono<Long> count(String idproduct) {
+	public Mono<Long> countByIdproduct(String idproduct) {
 		Operation operationFilter = new Operation();
 		operationFilter.setIdproduct(idproduct);
 		log.info("operationFilter " + operationFilter.getIdproduct());
@@ -129,5 +144,36 @@ public class OperationServiceImpl implements OperationService {
 		Example<Operation> personExample = Example.of(operationFilter, matcher);
 		return operationRepository.count(personExample);
 	}
+	
+	public Flux<Operation> findByIdproduct(int pageNo, int pageSize, String sortBy, String idproduct) {
+		Sort sort = Sort.by(sortBy).descending();
+	    Pageable pageable = PageRequest.of(pageNo, pageSize, sort);
+	    //   return operationRepository.findByIdproduct(idproduct)
+	    // 		.sort(Comparator.comparing(Operation::getCreatedAt).reversed())
+	    //        .skip(pageNo * pageSize).take(pageSize);
+	    return operationRepository.findByIdproduct(idproduct,pageable);
+	}
+	
+	public Flux<Operation> retrieveComissions(String idproduct,String startDate,String endDate){
+		/**
+		Query query = new Query().with(Sort.by(Collections.singletonList(Sort.Order.asc("createdAt"))));
+		query.addCriteria(Criteria.where("idproduct").in(idproduct));
+		query.addCriteria(new Criteria().andOperator(
+				        Criteria.where("createdAt").gt(DateOperators.dateFromString(startDate).withFormat("dd-mm-yyyy")),
+				        Criteria.where("createdAt").lt(DateOperators.dateFromString(endDate).withFormat("dd-mm-yyyy"))));
+		return reactiveMongoTemplate.find(query, Operation.class);
+	*/
+		
+        // Create DateTimeFormatter instance with specified format uuuuMMdd 
+        DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("dd-MM-yyyy");
+ 
+        // Convert String to LocalDateTime using Parse() method
+        LocalDateTime localDateTimeS = LocalDate.parse(startDate,dateTimeFormatter).atStartOfDay();
+        LocalDateTime localDateTimeE = LocalDate.parse(endDate,dateTimeFormatter).atStartOfDay();
+		
+		return operationRepository.findByIdproductAndCreatedAtBetween(idproduct, localDateTimeS, localDateTimeE);
+	}
+	
+	
 
 }
